@@ -1,0 +1,1 @@
+ALTER TABLE alerts ADD COLUMN fetch_history_id INTEGER REFERENCES alert_fetch_history(id);
