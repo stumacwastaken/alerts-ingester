@@ -4,7 +4,11 @@ import "math/rand/v2"
 
 type pickableList []string
 
+// if pickableList is empty return an empty string to avoid a panic
 func (s pickableList) pickOne() string {
+	if len(s) == 0 {
+		return ""
+	}
 	selection := rand.IntN(len(s) - 1)
 	return s[selection]
 }

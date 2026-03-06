@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,15 +46,18 @@ func main() {
 		panic(err)
 	}
 
-	defer db.Close()
 	if err := db.Ping(); err != nil {
 		logger.Error("failed to ping database. Exiting", slog.Any("error", err))
 		os.Exit(1)
 	}
 
+	// use a waitgroup to wait for any outstanding syncs that SyncPeriodically
+	// may be running
+	wg := sync.WaitGroup{}
 	alertsService := alerts.NewService(
 		logger,
 		data.NewStore(db),
+		&wg,
 		alerts.NewDemoSyncer(logger, conf.serviceURL),
 	)
 
@@ -74,8 +78,15 @@ func main() {
 	}
 
 	<-ctx.Done()
-	logger.Info("shutdown notice received, shutting down system...")
-	db.Close()
+	logger.Info("shutdown notice received, cleaning up...")
+	wg.Wait()
+	logger.Info("shutdown cleanup completed, closing DB")
+	if err = db.Close(); err != nil {
+		logger.Error(
+			"failed to close DB on shutdown, possible data loss",
+			slog.Any("error", err),
+		)
+	}
 	logger.Info("goodbye!")
 }
 

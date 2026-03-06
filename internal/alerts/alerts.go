@@ -49,13 +49,15 @@ type Service struct {
 	interval      time.Duration
 	syncRunningMu sync.Mutex
 	syncRunning   bool
+	swg           *sync.WaitGroup
 }
 
-func NewService(log *slog.Logger, queries *data.Store, syncer Syncer) *Service {
+func NewService(log *slog.Logger, queries *data.Store, swg *sync.WaitGroup, syncer Syncer) *Service {
 	return &Service{
 		queries: queries,
 		log:     log,
 		syncer:  syncer,
+		swg:     swg,
 	}
 }
 
@@ -82,7 +84,7 @@ func (s *Service) SyncPeriodically(ctx context.Context, interval time.Duration) 
 	} else {
 		lastScanTime = lastSync.ScannedAt
 	}
-	if err := s.runSync(context.Background(), lastScanTime); err != nil {
+	if err := s.RunSync(context.Background(), WithTimeStamp(lastScanTime)); err != nil {
 		s.log.Warn("failed to sync on startup",
 			slog.String("serviceName", s.syncer.ServiceName()),
 			slog.Any("error", err),
@@ -103,44 +105,69 @@ func (s *Service) SyncPeriodically(ctx context.Context, interval time.Duration) 
 			if t.Sub(lastSync.ScannedAt).Abs() < 1*time.Minute {
 				s.log.Info("most recent scan was within 1 minute of curren time, skipping interval")
 			}
-			err = s.runSync(context.Background(), lastSync.ScannedAt)
+			err = s.RunSync(context.Background(), WithTimeStamp(lastSync.ScannedAt))
 			if err != nil {
+				s.log.Warn("failed to run periodic sync", slog.Any("error", err))
 				continue
 			}
 		}
 	}
 }
 
-func (s *Service) RunSync(ctx context.Context) error {
+type runSyncOpts struct {
+	timestamp time.Time
+}
 
+type RunSyncFn func(*runSyncOpts)
+
+func WithTimeStamp(t time.Time) RunSyncFn {
+	return func(rso *runSyncOpts) {
+		rso.timestamp = t
+	}
+}
+
+func (s *Service) RunSync(ctx context.Context, opts ...RunSyncFn) error {
 	if s.syncRunning {
 		return ErrSyncAlreadyRunning
 	}
-	lastSync, err := s.queries.LastSyncs(ctx, 1)
-	if err != nil {
-		s.log.Error("failed to fetch last sync", slog.Any("error", err))
-		return ErrSyncRunFailedStart
+	s.syncRunningMu.Lock()
+	s.syncRunning = true
+	rso := &runSyncOpts{}
+	for _, opt := range opts {
+		opt(rso)
+	}
+
+	if rso.timestamp.IsZero() {
+		lastSync, err := s.queries.LastSuccessfulSync(ctx)
+		if err != nil {
+			s.log.Error("failed to fetch last sync", slog.Any("error", err))
+			return ErrSyncRunFailedStart
+		}
+
+		rso.timestamp = time.Now().UTC()
+		if !lastSync.ScannedAt.IsZero() {
+			rso.timestamp = lastSync.ScannedAt
+		}
 	}
 
 	go func() {
-		if err := s.runSync(context.Background(), lastSync[0].ScannedAt); err != nil {
-			s.log.Warn("failed to sync on startup",
+		if err := s.runSync(context.Background(), rso.timestamp); err != nil {
+			s.log.Warn("failed to sync",
 				slog.String("serviceName", s.syncer.ServiceName()),
 				slog.Any("error", err),
 			)
 		}
+		s.syncRunning = false
+		s.syncRunningMu.Unlock()
 	}()
 	return nil
 }
 
 // run the syncer and enrich the data if successful
 func (s *Service) runSync(ctx context.Context, since time.Time) error {
-	s.syncRunningMu.Lock()
-	s.syncRunning = true
-	defer func() {
-		s.syncRunning = false
-		s.syncRunningMu.Unlock()
-	}()
+	s.swg.Add(1)
+	defer s.swg.Done()
+
 	startTime := time.Now().UTC()
 	s.log.Debug("running sync for alert service", slog.String("serviceName", s.syncer.ServiceName()))
 	res, retries, err := s.syncer.Sync(ctx, since)
@@ -199,6 +226,7 @@ func (s *Service) runSync(ctx context.Context, since time.Time) error {
 				return err
 			}
 		}
+		s.log.Debug("finished sync job")
 		return nil
 	})
 }
@@ -237,7 +265,7 @@ func (s *Service) SyncedAlerts(ctx context.Context, limit, page int) ([]data.Ale
 		page = 1 // no negative pages
 	}
 
-	if limit > 1000 { // basic sanity. turn this into a user type error
+	if limit > 1000 { // basic sanity.
 		return nil, 0, &AlertError{Msg: "limit too large! maximum of 1000", Code: 400}
 	}
 	total, err := s.queries.CountAlerts(ctx)
@@ -266,7 +294,6 @@ func (s *Service) SyncedAlerts(ctx context.Context, limit, page int) ([]data.Ale
 }
 
 func (s *Service) ServiceStatus(ctx context.Context) string { // string return would be better as a type
-	// this could be a single sql query.
 	res, err := s.queries.LastSyncs(ctx, 10)
 	status := "down"
 

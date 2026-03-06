@@ -81,7 +81,7 @@ func createRouter(log *slog.Logger, db *sql.DB, alerts *alerts.Service) http.Han
 
 	mux.Handle("GET /health", api.NewHealthHandler(db, log, alerts))
 	mux.HandleFunc("GET /alerts", alertAPI.GetAlerts)
-	mux.HandleFunc("GET /sync", alertAPI.Sync)
+	mux.HandleFunc("POST /sync", alertAPI.Sync)
 	return mux
 }
 

@@ -73,7 +73,14 @@ func (d *DemoSyncer) Sync(ctx context.Context, since time.Time) ([]*data.Alert, 
 	if err != nil {
 		return nil, *retryCount, err
 	}
-
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			d.log.Error(
+				"failed to close request body in syncer, possible memory leak",
+				slog.Any("error", err),
+			)
+		}
+	}()
 	// There shouldn't be a reason why this would happen, but it's a cheap
 	// guard just in case.
 	if res.StatusCode > 300 || res.StatusCode < 200 {

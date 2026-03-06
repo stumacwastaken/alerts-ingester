@@ -28,6 +28,8 @@ type HealthHandler struct {
 	alertsSvc *alerts.Service
 }
 
+var errInternalServer = InternalServerError("failed to fetch health data!")
+
 func NewHealthHandler(db *sql.DB, log *slog.Logger, alertsSvc *alerts.Service) *HealthHandler {
 	return &HealthHandler{
 		db:        db,
@@ -41,13 +43,13 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context() // could add a timeout here
 	res, err := h.generateHealthReport(ctx)
 	if err != nil {
-		http.Error(w, "failed to fetch health data!", http.StatusInternalServerError)
+		ResponseFromError(w, r, errInternalServer)
 		return
 	}
 
 	marshalled, err := json.Marshal(res)
 	if err != nil {
-		http.Error(w, "failed to fetch health data!", http.StatusInternalServerError)
+		ResponseFromError(w, r, errInternalServer)
 		return
 	}
 

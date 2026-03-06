@@ -77,10 +77,6 @@ func main() {
 func handleAlert(conf *config) http.HandlerFunc {
 	log.Println("setting up handler alert")
 
-	//technically RFC3339 and iso8601 aren't exactly aligned. So using this
-	// and seeing how it goes with rfc3339 on the ingester side
-	iso8601Format := "2006-01-02T15:04:05Z0700"
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -99,10 +95,7 @@ func handleAlert(conf *config) http.HandlerFunc {
 		query := r.URL.Query()
 		timeSince := query.Get("since")
 
-		// Normally I'd just use rfc3339 format, but instructions explicitly
-		// state ISO8601 which has some annoying differences. It _should_ work
-		// with someone formatting the date into RFC3339 though.
-		since, err := time.Parse(iso8601Format, timeSince)
+		since, err := time.Parse(time.RFC3339, timeSince)
 		if err != nil {
 			http.Error(w, "failed to parse since param", http.StatusBadRequest)
 			return
