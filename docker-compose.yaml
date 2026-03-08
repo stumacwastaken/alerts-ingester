@@ -1,0 +1,50 @@
+version: '3'
+services:
+  alerts-server: 
+    build:
+      context: mocks/alerts-server
+      dockerfile: Dockerfile
+    env_file:
+      - ${ENV:-local}.env
+    ports:
+      - "${PORT:-9200}:${PORT:-9200}"
+    networks:
+      - alerts-net
+
+  migration:
+    build:
+      context: db/migrations
+      dockerfile: dockerfile.migrations
+    volumes:
+          - ./db:/db
+    command:
+     - "-path"
+     - "/db/migrations" 
+     - "-database=sqlite3:///db/alerts.db"
+     - "up"
+    profiles: [demo]
+    networks:
+      - alerts-net
+  
+  alerts-ingester:
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: dockerfile
+    volumes:
+      - ./db:/db
+    env_file:
+    - demo.env
+    profiles: [demo]
+    ports:
+      - "${INGESTER_PORT:-8080}:${INGESTER_PORT:-8080}"
+    networks:
+      - alerts-net
+volumes:
+  db: {}
+
+networks:
+  alerts-net:
+    name: alerts-shared-network

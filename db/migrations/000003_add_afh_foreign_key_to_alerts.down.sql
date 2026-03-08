@@ -1,0 +1,1 @@
+ALTER TABLE alerts DROP COLUMN fetch_history_id;
