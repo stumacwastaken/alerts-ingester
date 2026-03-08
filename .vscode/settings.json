@@ -1,0 +1,31 @@
+{
+    "[go]": {
+        "editor.rulers": [
+            {
+                "color": "#ff3aef",
+                "column": 80
+            },
+            {
+                "color": "#c02b2b",
+                "column": 120
+            }
+        ]
+    },
+    "[markdown]": {
+        "editor.rulers": [
+             {
+                "color": "#ff3aef",
+                "column": 80
+            },
+        ],
+        "editor.unicodeHighlight.ambiguousCharacters": false,
+        "editor.unicodeHighlight.invisibleCharacters": false,
+        "diffEditor.ignoreTrimWhitespace": false,
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
+    }
+}

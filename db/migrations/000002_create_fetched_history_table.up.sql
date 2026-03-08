@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS alert_fetch_history (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       scanned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       reattempts INTEGER DEFAULT 0,
+       success BOOLEAN NOT NULL DEFAULT 0,
+       reason TEXT
+)
